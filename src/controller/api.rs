@@ -137,7 +137,23 @@ pub async fn api_create_command(
         .map_err(internal_error)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, "comment not found".to_string()))?;
 
-    let (tool, _) = detect_ai_client();
+    let (detected_tool, _) = detect_ai_client();
+    let tool = normalize_tool_choice(payload.tool.as_deref(), &detected_tool)
+        .map_err(|msg| (StatusCode::BAD_REQUEST, msg.to_string()))?;
+    let custom_command = payload
+        .custom_command
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+
+    if tool == "custom" && custom_command.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "custom_command is required when tool is 'custom'".to_string(),
+        ));
+    }
+
     let prompt = build_command_prompt(&comment);
     let command = create_command(
         &state.state_db_path,
@@ -166,12 +182,13 @@ pub async fn api_create_command(
     let command_id = command.id;
     let tool = command.tool.clone();
     let prompt = command.prompt.clone();
+    let custom_command = custom_command.clone();
 
     tokio::spawn(async move {
         let _permit = permit;
         let result = timeout(
             Duration::from_secs(timeout_secs.max(1)),
-            execute_ai_command(db_path.clone(), root, command_id, tool, prompt),
+            execute_ai_command(db_path.clone(), root, command_id, tool, prompt, custom_command),
         )
         .await;
 
@@ -193,6 +210,30 @@ pub async fn api_create_command(
 pub async fn api_client() -> Json<ClientInfo> {
     let (client, source) = detect_ai_client();
     Json(ClientInfo { client, source })
+}
+
+fn normalize_tool_choice(requested: Option<&str>, detected: &str) -> anyhow::Result<String> {
+    let requested = requested.map(str::trim).filter(|v| !v.is_empty());
+    let normalized = match requested {
+        None => "auto",
+        Some(value) => value,
+    };
+
+    if normalized == "auto" {
+        return Ok(if detected == "unknown" {
+            "opencode".to_string()
+        } else {
+            detected.to_string()
+        });
+    }
+
+    if matches!(normalized, "opencode" | "claude" | "codex" | "custom") {
+        return Ok(normalized.to_string());
+    }
+
+    Err(anyhow::anyhow!(
+        "tool must be one of: auto, opencode, claude, codex, custom"
+    ))
 }
 
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {

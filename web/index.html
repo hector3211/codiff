@@ -82,6 +82,26 @@
         gap: 10px;
       }
 
+      .ai-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .ai-select {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: rgba(10, 18, 33, 0.9);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+
+      .ai-select {
+        min-width: 110px;
+      }
+
       .chip {
         font-size: 11px;
         color: #bae6fd;
@@ -273,11 +293,33 @@
       }
 
       .diff-line {
-        display: block;
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        align-items: baseline;
+        column-gap: 10px;
         padding: 0 8px;
         border-left: 2px solid transparent;
         border-radius: 2px;
         cursor: pointer;
+      }
+
+      .line-nos {
+        display: inline-flex;
+        justify-content: flex-end;
+        gap: 10px;
+        color: #64748b;
+        user-select: none;
+      }
+
+      .line-no {
+        display: inline-block;
+        min-width: 24px;
+        text-align: right;
+      }
+
+      .line-code {
+        min-width: 0;
+        white-space: pre;
       }
 
       .diff-line.header {
@@ -491,6 +533,11 @@
       }
 
       @media (max-width: 980px) {
+        .status-row {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
         .layout {
           grid-template-columns: 1fr;
         }
@@ -514,6 +561,14 @@
         <span>realtime local code review</span>
       </div>
       <div class="status-row">
+        <div class="ai-controls">
+          <select id="ai-tool-select" class="ai-select" title="AI client for Ask AI">
+            <option value="auto">Auto detect</option>
+            <option value="opencode">OpenCode</option>
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+          </select>
+        </div>
         <div class="chip" id="client-chip">client: unknown</div>
         <div class="status" id="status">connecting...</div>
       </div>
@@ -579,12 +634,16 @@
       const commentInputEl = document.getElementById("comment-input");
       const commentTargetEl = document.getElementById("comment-target");
       const clientChipEl = document.getElementById("client-chip");
+      const aiToolSelectEl = document.getElementById("ai-tool-select");
+
+      const AI_TOOL_KEY = "codiff.aiTool";
 
       const changes = new Map();
       const commentsByFile = new Map();
       const commandsByComment = new Map();
       let selected = null;
       let commentAnchor = null;
+      let detectedClient = "unknown";
 
       function withToken(path) {
         const hasQuery = path.includes("?");
@@ -595,6 +654,52 @@
         const headers = new Headers(options.headers || {});
         headers.set("x-codiff-token", CODIFF_TOKEN);
         return fetch(path, { ...options, headers });
+      }
+
+      function saveAiPreference() {
+        try {
+          localStorage.setItem(AI_TOOL_KEY, aiToolSelectEl.value);
+        } catch {
+          // ignore persistence failure
+        }
+      }
+
+      function restoreAiPreference() {
+        try {
+          const tool = localStorage.getItem(AI_TOOL_KEY);
+          if (tool && ["auto", "opencode", "claude", "codex"].includes(tool)) {
+            aiToolSelectEl.value = tool;
+          }
+        } catch {
+          // ignore persistence failure
+        }
+        refreshClientChip();
+      }
+
+      function refreshClientChip() {
+        const selectedTool = aiToolSelectEl.value;
+        if (selectedTool === "auto") {
+          clientChipEl.textContent = `client: ${detectedClient}`;
+          return;
+        }
+
+        if (selectedTool === "custom") {
+          clientChipEl.textContent = "client: custom";
+          return;
+        }
+
+        clientChipEl.textContent = `client: ${selectedTool}`;
+      }
+
+      function buildAskAiPayload(commentId) {
+        const payload = { comment_id: commentId };
+        const selectedTool = aiToolSelectEl.value;
+
+        if (selectedTool !== "auto") {
+          payload.tool = selectedTool;
+        }
+
+        return { payload };
       }
 
       function formatStatus(status) {
@@ -811,10 +916,16 @@
           askAi.className = "btn";
           askAi.textContent = "Ask AI";
           askAi.onclick = async () => {
+            const { payload, error } = buildAskAiPayload(item.id);
+            if (error) {
+              statusEl.textContent = error;
+              return;
+            }
+
             const response = await apiFetch("/api/commands", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ comment_id: item.id }),
+              body: JSON.stringify(payload),
             });
             if (!response.ok) {
               statusEl.textContent = "failed to queue AI command";
@@ -950,7 +1061,10 @@
         }
       }
 
-      function renderDiffLine(line, cls, language, index) {
+      function renderDiffLine(line, cls, language, index, numbers) {
+        const oldLine = numbers && numbers.old ? numbers.old : "";
+        const newLine = numbers && numbers.new ? numbers.new : "";
+
         if (
           (cls === "added" && !line.startsWith("+++ ")) ||
           (cls === "deleted" && !line.startsWith("--- ")) ||
@@ -958,19 +1072,50 @@
         ) {
           const prefix = line.length > 0 ? line[0] : "";
           const content = line.length > 0 ? line.slice(1) : "";
-          return `<span class="diff-line ${cls}" data-line-index="${index + 1}"><span class="diff-prefix">${escapeHtml(prefix)}</span>${highlightCode(content, language)}</span>`;
+          return `<span class="diff-line ${cls}" data-line-index="${index + 1}"><span class="line-nos"><span class="line-no">${oldLine}</span><span class="line-no">${newLine}</span></span><span class="line-code"><span class="diff-prefix">${escapeHtml(prefix)}</span>${highlightCode(content, language)}</span></span>`;
         }
 
-        return `<span class="diff-line ${cls}" data-line-index="${index + 1}">${escapeHtml(line)}</span>`;
+        return `<span class="diff-line ${cls}" data-line-index="${index + 1}"><span class="line-nos"><span class="line-no"></span><span class="line-no"></span></span><span class="line-code">${escapeHtml(line)}</span></span>`;
       }
 
       function renderRichDiff(diffText, filePath) {
         const language = detectLanguage(filePath || "");
         const lines = diffText.split("\n");
+        let oldLine = null;
+        let newLine = null;
         const html = lines
           .map((line, index) => {
             const cls = classifyLine(line);
-            return renderDiffLine(line, cls, language, index);
+            const numbers = { old: "", new: "" };
+
+            if (cls === "hunk") {
+              const match = line.match(/^@@\s*-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s*@@/);
+              if (match) {
+                oldLine = Number(match[1]);
+                newLine = Number(match[2]);
+              }
+            } else if (line.startsWith("+") && !line.startsWith("+++ ")) {
+              if (Number.isFinite(newLine)) {
+                numbers.new = String(newLine);
+                newLine += 1;
+              }
+            } else if (line.startsWith("-") && !line.startsWith("--- ")) {
+              if (Number.isFinite(oldLine)) {
+                numbers.old = String(oldLine);
+                oldLine += 1;
+              }
+            } else if (line.startsWith(" ")) {
+              if (Number.isFinite(oldLine)) {
+                numbers.old = String(oldLine);
+                oldLine += 1;
+              }
+              if (Number.isFinite(newLine)) {
+                numbers.new = String(newLine);
+                newLine += 1;
+              }
+            }
+
+            return renderDiffLine(line, cls, language, index, numbers);
           })
           .join("");
         diffEl.innerHTML = html;
@@ -1168,13 +1313,21 @@
             return;
           }
           const info = await response.json();
-          clientChipEl.textContent = `client: ${info.client}`;
+          detectedClient = info.client || "unknown";
+          refreshClientChip();
           clientChipEl.title = info.source || "";
         } catch {
-          clientChipEl.textContent = "client: unknown";
+          detectedClient = "unknown";
+          refreshClientChip();
         }
       }
 
+      aiToolSelectEl.addEventListener("change", () => {
+        refreshClientChip();
+        saveAiPreference();
+      });
+
+      restoreAiPreference();
       loadClientInfo();
 
       bootstrap().then(connect).catch(() => {

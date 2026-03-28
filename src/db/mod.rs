@@ -92,6 +92,8 @@ pub struct CommandRecord {
 #[derive(Debug, Deserialize)]
 pub struct CreateCommandRequest {
     pub comment_id: i64,
+    pub tool: Option<String>,
+    pub custom_command: Option<String>,
 }
 
 #[derive(QueryableByName)]

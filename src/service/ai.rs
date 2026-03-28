@@ -9,7 +9,7 @@ use crate::now_ms_i64;
 pub fn detect_ai_client() -> (String, String) {
     let checks = [
         ("opencode", ["OPENCODE", "OPEN_CODE"]),
-        ("claude_code", ["CLAUDE_CODE", "ANTHROPIC_API_KEY"]),
+        ("claude", ["CLAUDE_CODE", "ANTHROPIC_API_KEY"]),
         ("codex", ["CODEX", "OPENAI_API_KEY"]),
     ];
 
@@ -54,13 +54,14 @@ pub async fn execute_ai_command(
     command_id: i64,
     tool: String,
     prompt: String,
+    custom_command: Option<String>,
 ) {
     if let Err(err) = mark_command_running(&db_path, command_id, now_ms_i64()) {
         eprintln!("failed to mark command running: {err:#}");
         return;
     }
 
-    let result = run_ai_tool(&root, &tool, &prompt).await;
+    let result = run_ai_tool(&root, &tool, &prompt, custom_command.as_deref()).await;
     match result {
         Ok(output) => {
             let _ = mark_command_done(
@@ -85,14 +86,14 @@ pub async fn execute_ai_command(
     }
 }
 
-async fn run_ai_tool(root: &Path, tool: &str, prompt: &str) -> Result<String> {
+async fn run_ai_tool(root: &Path, tool: &str, prompt: &str, custom_command: Option<&str>) -> Result<String> {
     let mut cmd = match tool {
         "opencode" => {
             let mut c = Command::new("opencode");
             c.arg("run").arg(prompt);
             c
         }
-        "claude_code" => {
+        "claude" | "claude_code" => {
             let mut c = Command::new("claude");
             c.arg("-p").arg(prompt);
             c
@@ -102,6 +103,7 @@ async fn run_ai_tool(root: &Path, tool: &str, prompt: &str) -> Result<String> {
             c.arg(prompt);
             c
         }
+        "custom" => build_custom_command(custom_command, prompt)?,
         _ => {
             let mut c = Command::new("opencode");
             c.arg("run").arg(prompt);
@@ -124,4 +126,36 @@ async fn run_ai_tool(root: &Path, tool: &str, prompt: &str) -> Result<String> {
         "AI command failed ({tool}): {}",
         String::from_utf8_lossy(&output.stderr).trim()
     ))
+}
+
+fn build_custom_command(custom_command: Option<&str>, prompt: &str) -> Result<Command> {
+    let template = custom_command
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .context("custom command template is empty")?;
+
+    let escaped_prompt = shell_escape(prompt);
+    let rendered = if template.contains("{prompt}") {
+        template.replace("{prompt}", &escaped_prompt)
+    } else {
+        format!("{template} {escaped_prompt}")
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(rendered);
+        Ok(c)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut c = Command::new("sh");
+        c.arg("-lc").arg(rendered);
+        Ok(c)
+    }
+}
+
+fn shell_escape(input: &str) -> String {
+    format!("'{}'", input.replace('\'', "'\"'\"'"))
 }
