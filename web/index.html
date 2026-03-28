@@ -4,18 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>codiff</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
+    />
     <style>
       :root {
-        --bg: #0f172a;
-        --panel: #111827;
-        --panel-muted: #1f2937;
-        --text: #e5e7eb;
-        --muted: #94a3b8;
-        --accent: #0ea5e9;
+        --bg: #0b1220;
+        --panel: #0f172a;
+        --panel-muted: #182237;
+        --text: #e2e8f0;
+        --muted: #93a4bc;
+        --accent: #38bdf8;
         --added: #22c55e;
+        --added-bg: rgba(34, 197, 94, 0.16);
         --modified: #f59e0b;
+        --modified-bg: rgba(245, 158, 11, 0.14);
         --deleted: #ef4444;
-        --border: #334155;
+        --deleted-bg: rgba(239, 68, 68, 0.16);
+        --hunk: #7dd3fc;
+        --border: #2f415f;
       }
 
       * {
@@ -26,7 +34,10 @@
         margin: 0;
         font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
         color: var(--text);
-        background: radial-gradient(circle at 20% 0%, #1e293b 0%, var(--bg) 45%);
+        background:
+          radial-gradient(circle at 8% 4%, rgba(56, 189, 248, 0.23) 0%, rgba(56, 189, 248, 0) 36%),
+          radial-gradient(circle at 82% -8%, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0) 40%),
+          var(--bg);
         min-height: 100vh;
       }
 
@@ -36,10 +47,11 @@
         justify-content: space-between;
         padding: 14px 18px;
         border-bottom: 1px solid var(--border);
-        background: rgba(15, 23, 42, 0.7);
+        background: rgba(9, 14, 26, 0.75);
         backdrop-filter: blur(6px);
         position: sticky;
         top: 0;
+        z-index: 4;
       }
 
       .brand {
@@ -51,7 +63,7 @@
       .brand h1 {
         margin: 0;
         font-size: 18px;
-        color: var(--accent);
+        color: #7dd3fc;
       }
 
       .brand span {
@@ -64,15 +76,30 @@
         color: var(--muted);
       }
 
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .chip {
+        font-size: 11px;
+        color: #bae6fd;
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        background: rgba(56, 189, 248, 0.12);
+        padding: 2px 6px;
+        border-radius: 999px;
+      }
+
       .layout {
         display: grid;
-        grid-template-columns: 320px minmax(0, 1fr);
+        grid-template-columns: 340px minmax(0, 1fr);
         min-height: calc(100vh - 58px);
       }
 
       .files {
         border-right: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.95));
+        background: linear-gradient(180deg, rgba(16, 24, 40, 0.95), rgba(10, 18, 33, 0.95));
         overflow: auto;
       }
 
@@ -86,6 +113,30 @@
         letter-spacing: 0.08em;
       }
 
+      .files-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(12, 20, 36, 0.55);
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle input {
+        accent-color: #22c55e;
+      }
+
       .file-item {
         width: 100%;
         text-align: left;
@@ -96,11 +147,27 @@
         border-bottom: 1px solid #1f2937;
         cursor: pointer;
         font: inherit;
+        transition: background 120ms ease, border-color 120ms ease;
       }
 
       .file-item:hover,
       .file-item.active {
-        background: rgba(14, 165, 233, 0.12);
+        background: rgba(56, 189, 248, 0.14);
+      }
+
+      .file-item.hot {
+        border-left: 3px solid #22c55e;
+        background: rgba(34, 197, 94, 0.1);
+      }
+
+      .file-item.warm {
+        border-left: 3px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.09);
+      }
+
+      .file-item.stale {
+        border-left: 3px solid transparent;
+        opacity: 0.82;
       }
 
       .file-row {
@@ -108,6 +175,27 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+      }
+
+      .file-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .age.hot {
+        color: #86efac;
+      }
+
+      .age.warm {
+        color: #fcd34d;
+      }
+
+      .age.stale {
+        color: var(--muted);
       }
 
       .file-path {
@@ -127,22 +215,53 @@
 
       .badge.added {
         color: var(--added);
-        border-color: rgba(34, 197, 94, 0.45);
+        border-color: rgba(34, 197, 94, 0.6);
+        background: var(--added-bg);
       }
 
       .badge.modified {
         color: var(--modified);
-        border-color: rgba(245, 158, 11, 0.45);
+        border-color: rgba(245, 158, 11, 0.58);
+        background: var(--modified-bg);
       }
 
       .badge.deleted {
         color: var(--deleted);
-        border-color: rgba(239, 68, 68, 0.45);
+        border-color: rgba(239, 68, 68, 0.58);
+        background: var(--deleted-bg);
+      }
+
+      .diff-wrap {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-height: calc(100vh - 58px);
+      }
+
+      .diff-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(12, 20, 36, 0.88);
+      }
+
+      .diff-file {
+        font-size: 12px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .diff-time {
+        font-size: 11px;
+        color: var(--muted);
       }
 
       .diff {
         overflow: auto;
-        background: rgba(15, 23, 42, 0.4);
+        background: rgba(8, 14, 26, 0.44);
       }
 
       .diff pre {
@@ -153,8 +272,222 @@
         white-space: pre;
       }
 
+      .diff-line {
+        display: block;
+        padding: 0 8px;
+        border-left: 2px solid transparent;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+
+      .diff-line.header {
+        color: #facc15;
+      }
+
+      .diff-line.hunk {
+        color: var(--hunk);
+      }
+
+      .diff-line.added {
+        color: #86efac;
+        background: var(--added-bg);
+        border-left-color: var(--added);
+      }
+
+      .diff-line.deleted {
+        color: #fca5a5;
+        background: var(--deleted-bg);
+        border-left-color: var(--deleted);
+      }
+
+      .diff-line.context {
+        color: #cbd5e1;
+      }
+
+      .diff-line.anchor {
+        outline: 1px solid rgba(56, 189, 248, 0.9);
+        background: rgba(56, 189, 248, 0.12);
+      }
+
+      .diff-prefix {
+        color: #94a3b8;
+      }
+
+      .diff-line .hljs {
+        background: transparent;
+        padding: 0;
+        color: inherit;
+      }
+
+      .diff-line .hljs-comment,
+      .diff-line .hljs-quote {
+        color: #94a3b8;
+      }
+
+      .diff-line .hljs-keyword,
+      .diff-line .hljs-selector-tag,
+      .diff-line .hljs-subst {
+        color: #c4b5fd;
+      }
+
+      .diff-line .hljs-string,
+      .diff-line .hljs-doctag,
+      .diff-line .hljs-regexp {
+        color: #f9a8d4;
+      }
+
+      .diff-line .hljs-number,
+      .diff-line .hljs-literal,
+      .diff-line .hljs-variable,
+      .diff-line .hljs-template-variable {
+        color: #facc15;
+      }
+
+      .diff-line .hljs-title,
+      .diff-line .hljs-function,
+      .diff-line .hljs-section {
+        color: #38bdf8;
+      }
+
+      .diff-line .hljs-type,
+      .diff-line .hljs-class .hljs-title,
+      .diff-line .hljs-attribute {
+        color: #34d399;
+      }
+
+      .diff-line .hljs-built_in,
+      .diff-line .hljs-builtin-name {
+        color: #fdba74;
+      }
+
+      .diff-line .hljs-meta,
+      .diff-line .hljs-symbol,
+      .diff-line .hljs-bullet,
+      .diff-line .hljs-link {
+        color: #67e8f9;
+      }
+
       .placeholder {
         color: var(--muted);
+      }
+
+      .comments {
+        border-top: 1px solid var(--border);
+        background: rgba(9, 16, 30, 0.85);
+        max-height: 34vh;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .comments-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        border-bottom: 1px solid rgba(47, 65, 95, 0.55);
+      }
+
+      .comments-list {
+        overflow: auto;
+        padding: 8px 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .comment-item {
+        border: 1px solid rgba(47, 65, 95, 0.8);
+        border-radius: 8px;
+        padding: 8px;
+        background: rgba(17, 24, 39, 0.6);
+      }
+
+      .comment-item.resolved {
+        opacity: 0.75;
+      }
+
+      .comment-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 6px;
+      }
+
+      .comment-body {
+        white-space: pre-wrap;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .comment-actions {
+        margin-top: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .command-status {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .btn {
+        border: 1px solid var(--border);
+        background: rgba(30, 41, 59, 0.7);
+        color: var(--text);
+        font: inherit;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .btn:hover {
+        background: rgba(56, 189, 248, 0.15);
+      }
+
+      .comment-form {
+        border-top: 1px solid rgba(47, 65, 95, 0.55);
+        padding: 8px 10px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .comment-input {
+        width: 100%;
+        min-height: 58px;
+        resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(15, 23, 42, 0.9);
+      }
+
+      .comment-form-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .comment-target {
+        font-size: 11px;
+        color: #bae6fd;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 11px;
       }
 
       @media (max-width: 980px) {
@@ -167,6 +500,10 @@
           border-right: 0;
           border-bottom: 1px solid var(--border);
         }
+
+        .diff-wrap {
+          min-height: 62vh;
+        }
       }
     </style>
   </head>
@@ -176,26 +513,89 @@
         <h1>codiff</h1>
         <span>realtime local code review</span>
       </div>
-      <div class="status" id="status">connecting...</div>
+      <div class="status-row">
+        <div class="chip" id="client-chip">client: unknown</div>
+        <div class="status" id="status">connecting...</div>
+      </div>
     </header>
 
     <main class="layout">
       <section class="files">
         <h2>Changed Files</h2>
+        <div class="files-toolbar">
+          <label class="toggle">
+            <input type="checkbox" id="recent-only" />
+            Recent only (60s)
+          </label>
+          <span>Shortcut: R</span>
+        </div>
         <div id="files"></div>
       </section>
-      <section class="diff">
-        <pre id="diff" class="placeholder">No changed files yet. Start editing to see live diffs.</pre>
+      <section class="diff-wrap">
+        <div class="diff-head">
+          <div class="diff-file" id="diff-file">No file selected</div>
+          <div class="diff-time" id="diff-time">--</div>
+        </div>
+        <div class="diff">
+          <pre id="diff" class="placeholder">No changed files yet. Start editing to see live diffs.</pre>
+        </div>
+        <section class="comments">
+          <div class="comments-head">
+            <span>Comments</span>
+            <span id="comments-count">0</span>
+          </div>
+          <div id="comments-list" class="comments-list">
+            <div class="placeholder">Select a file to view comments.</div>
+          </div>
+          <form id="comment-form" class="comment-form">
+            <textarea
+              id="comment-input"
+              class="comment-input"
+              placeholder="Leave a review comment for this file..."
+            ></textarea>
+            <div class="comment-form-row">
+              <span class="comment-target" id="comment-target">Target: file-level</span>
+              <span class="muted">Saved to current session</span>
+              <button type="submit" class="btn">Add Comment</button>
+            </div>
+          </form>
+        </section>
       </section>
     </main>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
     <script>
+      const CODIFF_TOKEN = "__CODIFF_TOKEN__";
+
       const filesEl = document.getElementById("files");
       const diffEl = document.getElementById("diff");
       const statusEl = document.getElementById("status");
+      const diffFileEl = document.getElementById("diff-file");
+      const diffTimeEl = document.getElementById("diff-time");
+      const recentOnlyEl = document.getElementById("recent-only");
+      const commentsListEl = document.getElementById("comments-list");
+      const commentsCountEl = document.getElementById("comments-count");
+      const commentFormEl = document.getElementById("comment-form");
+      const commentInputEl = document.getElementById("comment-input");
+      const commentTargetEl = document.getElementById("comment-target");
+      const clientChipEl = document.getElementById("client-chip");
 
       const changes = new Map();
+      const commentsByFile = new Map();
+      const commandsByComment = new Map();
       let selected = null;
+      let commentAnchor = null;
+
+      function withToken(path) {
+        const hasQuery = path.includes("?");
+        return `${path}${hasQuery ? "&" : "?"}token=${encodeURIComponent(CODIFF_TOKEN)}`;
+      }
+
+      async function apiFetch(path, options = {}) {
+        const headers = new Headers(options.headers || {});
+        headers.set("x-codiff-token", CODIFF_TOKEN);
+        return fetch(path, { ...options, headers });
+      }
 
       function formatStatus(status) {
         if (!status) return "";
@@ -203,13 +603,47 @@
       }
 
       function sortedChanges() {
-        return Array.from(changes.values()).sort((a, b) =>
-          a.path.localeCompare(b.path)
-        );
+        return Array.from(changes.values()).sort((a, b) => {
+          if (b.timestamp_ms !== a.timestamp_ms) {
+            return b.timestamp_ms - a.timestamp_ms;
+          }
+          return a.path.localeCompare(b.path);
+        });
+      }
+
+      function visibleChanges() {
+        const items = sortedChanges();
+        if (!recentOnlyEl.checked) {
+          return items;
+        }
+
+        return items.filter((item) => ageSeconds(item.timestamp_ms) <= 60);
+      }
+
+      function ageSeconds(timestampMs) {
+        return Math.max(0, Math.floor((Date.now() - timestampMs) / 1000));
+      }
+
+      function freshnessClass(ageSec) {
+        if (ageSec <= 10) return "hot";
+        if (ageSec <= 60) return "warm";
+        return "stale";
+      }
+
+      function formatAge(ageSec) {
+        if (ageSec < 60) {
+          return `${ageSec}s ago`;
+        }
+        if (ageSec < 3600) {
+          const mins = Math.floor(ageSec / 60);
+          return `${mins}m ago`;
+        }
+        const hours = Math.floor(ageSec / 3600);
+        return `${hours}h ago`;
       }
 
       function renderFiles() {
-        const items = sortedChanges();
+        const items = visibleChanges();
         filesEl.innerHTML = "";
 
         if (items.length === 0) {
@@ -226,12 +660,21 @@
         }
 
         for (const item of items) {
+          const ageSec = ageSeconds(item.timestamp_ms);
+          const freshness = freshnessClass(ageSec);
+
           const button = document.createElement("button");
-          button.className = "file-item" + (item.path === selected ? " active" : "");
+          button.className =
+            "file-item " +
+            freshness +
+            (item.path === selected ? " active" : "");
           button.onclick = () => {
             selected = item.path;
             renderFiles();
             renderDiff();
+            loadCommentsForSelected().catch(() => {
+              statusEl.textContent = "failed to load comments";
+            });
           };
 
           const row = document.createElement("div");
@@ -245,9 +688,19 @@
           badge.className = "badge " + item.status;
           badge.textContent = formatStatus(item.status);
 
+          const meta = document.createElement("div");
+          meta.className = "file-meta";
+
+          const age = document.createElement("span");
+          age.className = "age " + freshness;
+          age.textContent = formatAge(ageSec);
+
+          meta.appendChild(age);
+
           row.appendChild(path);
           row.appendChild(badge);
           button.appendChild(row);
+          button.appendChild(meta);
           filesEl.appendChild(button);
         }
       }
@@ -256,12 +709,272 @@
         if (!selected || !changes.has(selected)) {
           diffEl.className = "placeholder";
           diffEl.textContent = "No changed files yet. Start editing to see live diffs.";
+          diffFileEl.textContent = "No file selected";
+          diffTimeEl.textContent = "--";
+          commentAnchor = null;
+          renderCommentTarget();
+          renderComments([]);
           return;
         }
 
         const item = changes.get(selected);
+        if (recentOnlyEl.checked && ageSeconds(item.timestamp_ms) > 60) {
+          diffEl.className = "placeholder";
+          diffEl.textContent = "Selected file is hidden by Recent only filter.";
+          diffFileEl.textContent = item.path;
+          diffTimeEl.textContent = `${new Date(item.timestamp_ms).toLocaleTimeString()} (${formatAge(ageSeconds(item.timestamp_ms))})`;
+          return;
+        }
+
+        const ageSec = ageSeconds(item.timestamp_ms);
         diffEl.className = "";
-        diffEl.textContent = item.diff || "(no diff available)";
+        diffFileEl.textContent = item.path;
+        diffTimeEl.textContent = `${new Date(item.timestamp_ms).toLocaleTimeString()} (${formatAge(ageSec)})`;
+        renderRichDiff(item.diff || "(no diff available)", item.path);
+      }
+
+      function renderCommentTarget() {
+        if (!selected) {
+          commentTargetEl.textContent = "Target: none";
+          return;
+        }
+
+        if (!commentAnchor) {
+          commentTargetEl.textContent = "Target: file-level";
+          return;
+        }
+
+        if (commentAnchor.start === commentAnchor.end) {
+          commentTargetEl.textContent = `Target: line ${commentAnchor.start}`;
+        } else {
+          commentTargetEl.textContent = `Target: lines ${commentAnchor.start}-${commentAnchor.end}`;
+        }
+      }
+
+      function renderComments(items) {
+        commentsCountEl.textContent = `${items.length}`;
+        commentsListEl.innerHTML = "";
+
+        if (!selected) {
+          commentsListEl.innerHTML = '<div class="placeholder">Select a file to view comments.</div>';
+          return;
+        }
+
+        if (items.length === 0) {
+          commentsListEl.innerHTML = '<div class="placeholder">No comments yet for this file.</div>';
+          return;
+        }
+
+        for (const item of items) {
+          const wrap = document.createElement("div");
+          wrap.className = "comment-item" + (item.status === "resolved" ? " resolved" : "");
+
+          const meta = document.createElement("div");
+          meta.className = "comment-meta";
+          const status = item.status === "resolved" ? "resolved" : "open";
+          let anchorText = "file";
+          if (item.line_start && item.line_end && item.line_start !== item.line_end) {
+            anchorText = `L${item.line_start}-L${item.line_end}`;
+          } else if (item.line_start) {
+            anchorText = `L${item.line_start}`;
+          }
+          meta.textContent = `${status} - ${anchorText} - ${new Date(item.updated_at_ms).toLocaleTimeString()}`;
+
+          const body = document.createElement("div");
+          body.className = "comment-body";
+          body.textContent = item.body + (item.selected_text ? `\n\n"${item.selected_text}"` : "");
+
+          const actions = document.createElement("div");
+          actions.className = "comment-actions";
+
+          const statusText = document.createElement("div");
+          statusText.className = "command-status";
+          const commandRows = commandsByComment.get(item.id) || [];
+          if (commandRows.length === 0) {
+            statusText.textContent = "No AI command yet";
+          } else {
+            const latest = commandRows[0];
+            statusText.textContent = `${latest.status} via ${latest.tool}`;
+            if (latest.error_text) {
+              statusText.title = latest.error_text;
+            } else if (latest.output_text) {
+              statusText.title = latest.output_text;
+            }
+          }
+
+          const right = document.createElement("div");
+          right.style.display = "flex";
+          right.style.gap = "6px";
+
+          const askAi = document.createElement("button");
+          askAi.type = "button";
+          askAi.className = "btn";
+          askAi.textContent = "Ask AI";
+          askAi.onclick = async () => {
+            const response = await apiFetch("/api/commands", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ comment_id: item.id }),
+            });
+            if (!response.ok) {
+              statusEl.textContent = "failed to queue AI command";
+              return;
+            }
+            await loadCommandsForComments(items);
+            renderComments(items);
+          };
+
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "btn";
+          toggle.textContent = item.status === "resolved" ? "Reopen" : "Resolve";
+          toggle.onclick = async () => {
+            const nextStatus = item.status === "resolved" ? "open" : "resolved";
+            await apiFetch(`/api/comments/${item.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: nextStatus }),
+            });
+            await loadCommentsForSelected();
+          };
+
+          right.appendChild(askAi);
+          right.appendChild(toggle);
+          actions.appendChild(statusText);
+          actions.appendChild(right);
+          wrap.appendChild(meta);
+          wrap.appendChild(body);
+          wrap.appendChild(actions);
+          commentsListEl.appendChild(wrap);
+        }
+      }
+
+      async function loadCommandsForComments(items) {
+        await Promise.all(
+          items.map(async (item) => {
+            try {
+              const response = await apiFetch(`/api/commands?comment_id=${item.id}&limit=5`);
+              if (!response.ok) {
+                return;
+              }
+              const rows = await response.json();
+              commandsByComment.set(item.id, rows);
+            } catch {
+              // keep stale values
+            }
+          })
+        );
+      }
+
+      async function loadCommentsForSelected() {
+        if (!selected) {
+          renderComments([]);
+          return;
+        }
+
+        const response = await apiFetch(`/api/comments?file=${encodeURIComponent(selected)}&include_resolved=true&limit=200`);
+        const items = await response.json();
+        await loadCommandsForComments(items);
+        commentsByFile.set(selected, items);
+        renderComments(items);
+      }
+
+      function escapeHtml(text) {
+        return text
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function classifyLine(line) {
+        if (line.startsWith("+++ ") || line.startsWith("--- ")) return "header";
+        if (line.startsWith("@@")) return "hunk";
+        if (line.startsWith("+") && !line.startsWith("+++ ")) return "added";
+        if (line.startsWith("-") && !line.startsWith("--- ")) return "deleted";
+        return "context";
+      }
+
+      function detectLanguage(filePath) {
+        const ext = (filePath.split(".").pop() || "").toLowerCase();
+        const map = {
+          rs: "rust",
+          zig: "zig",
+          js: "javascript",
+          mjs: "javascript",
+          cjs: "javascript",
+          ts: "typescript",
+          tsx: "typescript",
+          jsx: "javascript",
+          py: "python",
+          json: "json",
+          md: "markdown",
+          html: "xml",
+          htm: "xml",
+          css: "css",
+          scss: "scss",
+          toml: "toml",
+          yml: "yaml",
+          yaml: "yaml",
+          sh: "bash",
+          bash: "bash",
+          go: "go",
+          java: "java",
+          c: "c",
+          h: "c",
+          cpp: "cpp",
+          cc: "cpp",
+          hpp: "cpp",
+          rb: "ruby",
+          php: "php",
+          sql: "sql",
+        };
+
+        return map[ext] || null;
+      }
+
+      function highlightCode(code, language) {
+        const hljs = window.hljs;
+        if (!hljs) {
+          return escapeHtml(code);
+        }
+
+        try {
+          if (language && hljs.getLanguage(language)) {
+            return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+          }
+          return hljs.highlightAuto(code).value;
+        } catch {
+          return escapeHtml(code);
+        }
+      }
+
+      function renderDiffLine(line, cls, language, index) {
+        if (
+          (cls === "added" && !line.startsWith("+++ ")) ||
+          (cls === "deleted" && !line.startsWith("--- ")) ||
+          cls === "context"
+        ) {
+          const prefix = line.length > 0 ? line[0] : "";
+          const content = line.length > 0 ? line.slice(1) : "";
+          return `<span class="diff-line ${cls}" data-line-index="${index + 1}"><span class="diff-prefix">${escapeHtml(prefix)}</span>${highlightCode(content, language)}</span>`;
+        }
+
+        return `<span class="diff-line ${cls}" data-line-index="${index + 1}">${escapeHtml(line)}</span>`;
+      }
+
+      function renderRichDiff(diffText, filePath) {
+        const language = detectLanguage(filePath || "");
+        const lines = diffText.split("\n");
+        const html = lines
+          .map((line, index) => {
+            const cls = classifyLine(line);
+            return renderDiffLine(line, cls, language, index);
+          })
+          .join("");
+        diffEl.innerHTML = html;
+        applyLineAnchors();
       }
 
       function consumeChange(change) {
@@ -274,18 +987,81 @@
         renderDiff();
       }
 
+      function clearLineAnchors() {
+        document.querySelectorAll(".diff-line.anchor").forEach((el) => {
+          el.classList.remove("anchor");
+        });
+      }
+
+      function applyLineAnchors() {
+        clearLineAnchors();
+        if (!commentAnchor) {
+          return;
+        }
+
+        const start = Math.min(commentAnchor.start, commentAnchor.end);
+        const end = Math.max(commentAnchor.start, commentAnchor.end);
+        for (let i = start; i <= end; i += 1) {
+          const lineEl = document.querySelector(`.diff-line[data-line-index="${i}"]`);
+          if (lineEl) {
+            lineEl.classList.add("anchor");
+          }
+        }
+      }
+
+      function captureSelectionAnchor() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+          return;
+        }
+
+        const range = sel.getRangeAt(0);
+        const startEl = range.startContainer.parentElement?.closest?.(".diff-line");
+        const endEl = range.endContainer.parentElement?.closest?.(".diff-line");
+        if (!startEl || !endEl) {
+          return;
+        }
+
+        const startIdx = Number(startEl.dataset.lineIndex);
+        const endIdx = Number(endEl.dataset.lineIndex);
+        if (!Number.isFinite(startIdx) || !Number.isFinite(endIdx)) {
+          return;
+        }
+
+        const text = sel.toString().trim();
+        commentAnchor = {
+          start: Math.min(startIdx, endIdx),
+          end: Math.max(startIdx, endIdx),
+          selectedText: text || null,
+        };
+        renderCommentTarget();
+        applyLineAnchors();
+      }
+
+      function jumpToMostRecent() {
+        const items = visibleChanges();
+        if (items.length === 0) {
+          return;
+        }
+
+        selected = items[0].path;
+        renderFiles();
+        renderDiff();
+      }
+
       async function bootstrap() {
-        const response = await fetch("/api/state");
+        const response = await apiFetch("/api/state");
         const initial = await response.json();
         for (const item of initial) {
           changes.set(item.path, item);
         }
         renderFiles();
         renderDiff();
+        await loadCommentsForSelected();
       }
 
       function connect() {
-        const es = new EventSource("/events");
+        const es = new EventSource(withToken("/events"));
 
         es.onopen = () => {
           statusEl.textContent = "connected";
@@ -305,9 +1081,118 @@
         });
       }
 
+      recentOnlyEl.addEventListener("change", () => {
+        renderFiles();
+        renderDiff();
+      });
+
+      commentFormEl.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!selected) {
+          statusEl.textContent = "select a file before commenting";
+          return;
+        }
+
+        const body = commentInputEl.value.trim();
+        if (!body) {
+          return;
+        }
+
+        const response = await apiFetch("/api/comments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_path: selected,
+            line_start: commentAnchor ? commentAnchor.start : null,
+            line_end: commentAnchor ? commentAnchor.end : null,
+            selected_text: commentAnchor ? commentAnchor.selectedText : null,
+            body,
+          }),
+        });
+
+        if (!response.ok) {
+          statusEl.textContent = "failed to save comment";
+          return;
+        }
+
+        commentInputEl.value = "";
+        commentAnchor = null;
+        renderCommentTarget();
+        applyLineAnchors();
+        await loadCommentsForSelected();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const tag = (event.target && event.target.tagName) || "";
+        const isTypingTarget = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+        if (isTypingTarget) {
+          return;
+        }
+
+        if (event.key === "r" || event.key === "R") {
+          jumpToMostRecent();
+        } else if (event.key === "Escape") {
+          commentAnchor = null;
+          renderCommentTarget();
+          applyLineAnchors();
+        }
+      });
+
+      diffEl.addEventListener("click", (event) => {
+        const lineEl = event.target.closest?.(".diff-line");
+        if (!lineEl) {
+          return;
+        }
+        const idx = Number(lineEl.dataset.lineIndex);
+        if (!Number.isFinite(idx)) {
+          return;
+        }
+
+        if (event.shiftKey && commentAnchor) {
+          commentAnchor.end = idx;
+        } else {
+          commentAnchor = { start: idx, end: idx, selectedText: null };
+        }
+        renderCommentTarget();
+        applyLineAnchors();
+      });
+
+      diffEl.addEventListener("mouseup", () => {
+        captureSelectionAnchor();
+      });
+
+      async function loadClientInfo() {
+        try {
+          const response = await apiFetch("/api/client");
+          if (!response.ok) {
+            return;
+          }
+          const info = await response.json();
+          clientChipEl.textContent = `client: ${info.client}`;
+          clientChipEl.title = info.source || "";
+        } catch {
+          clientChipEl.textContent = "client: unknown";
+        }
+      }
+
+      loadClientInfo();
+
       bootstrap().then(connect).catch(() => {
         statusEl.textContent = "failed to initialize";
       });
+
+      setInterval(() => {
+        if (changes.size > 0) {
+          renderFiles();
+          renderDiff();
+        }
+      }, 1000);
+
+      setInterval(() => {
+        if (selected) {
+          loadCommentsForSelected().catch(() => {});
+        }
+      }, 4000);
     </script>
   </body>
 </html>

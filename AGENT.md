@@ -25,12 +25,21 @@ Planned next:
 - search/filter and hunk jump shortcuts
 - optional patch export and session replay
 
+Recently completed UX improvements:
+
+- highlighted recency in Changed Files list (hot/warm/stale)
+- optional recent-only filter (last 60 seconds)
+- keyboard shortcut `R` to jump to latest visible change
+
 ## Architecture
 
 - `src/main.rs`: CLI, watcher setup, diff generation, SSE streaming, API routes
+- `src/db/`: Diesel-based DB access and session/comment persistence
 - `web/index.html`: local UI (no build step)
+- `migrations/`: SQL schema migrations managed by Diesel
 - baseline snapshot: in-memory map of `path -> file contents`
 - live state: in-memory map of changed files and latest diff payload
+- session state: SQLite DB in global state dir (`state.db`)
 
 ## Development Rules
 
@@ -40,6 +49,8 @@ Planned next:
 - Handle binary/large files safely (skip or summarize)
 - Respect ignores: `.git/`, `target/`, and user-defined patterns later
 - Keep host binding loopback-only by default; require explicit opt-in for remote access
+- Enforce one active codiff instance per project path
+- Persist project/session metadata in local SQLite
 
 ## Done Criteria (for each increment)
 
@@ -66,5 +77,6 @@ Useful flags:
 - `--max-file-bytes 500000` to cap snapshot/diff file size
 - `--debounce-ms 150` to batch bursty edits
 - `--allow-remote` only when you intentionally want non-loopback bind
+- `--state-dir <PATH>` to override global state/lock directory
 
 Open `http://127.0.0.1:8787` and edit files under the watched path.

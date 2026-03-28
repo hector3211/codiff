@@ -1,0 +1,53 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: codiff-linux-x86_64.tar.gz
+            bin: codiff
+          - os: macos-latest
+            artifact: codiff-macos-x86_64.tar.gz
+            bin: codiff
+          - os: windows-latest
+            artifact: codiff-windows-x86_64.zip
+            bin: codiff.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package binary (unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir dist
+          cp "target/release/${{ matrix.bin }}" dist/
+          tar -czf "${{ matrix.artifact }}" -C dist "${{ matrix.bin }}"
+
+      - name: Package binary (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item "target/release/${{ matrix.bin }}" dist/
+          Compress-Archive -Path "dist/${{ matrix.bin }}" -DestinationPath "${{ matrix.artifact }}"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
