@@ -10,20 +10,13 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact: codiff-linux-x86_64.tar.gz
-            bin: codiff
-          - os: macos-latest
-            artifact: codiff-macos-x86_64.tar.gz
-            bin: codiff
-          - os: windows-latest
-            artifact: codiff-windows-x86_64.zip
-            bin: codiff.exe
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
 
-    runs-on: ${{ matrix.os }}
+    env:
+      ARTIFACT: codiff-linux-x86_64.tar.gz
+      BIN: codiff
 
     steps:
       - name: Checkout
@@ -35,22 +28,24 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
-      - name: Package binary (unix)
-        if: runner.os != 'Windows'
+      - name: Package binary
         run: |
           mkdir dist
-          cp "target/release/${{ matrix.bin }}" dist/
-          tar -czf "${{ matrix.artifact }}" -C dist "${{ matrix.bin }}"
+          cp "target/release/${BIN}" dist/
+          tar -czf "${ARTIFACT}" -C dist "${BIN}"
 
-      - name: Package binary (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path dist | Out-Null
-          Copy-Item "target/release/${{ matrix.bin }}" dist/
-          Compress-Archive -Path "dist/${{ matrix.bin }}" -DestinationPath "${{ matrix.artifact }}"
-
-      - name: Upload release asset
+      - name: Upload release asset (PAT)
+        if: ${{ secrets.RELEASE_PAT != '' }}
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
-          files: ${{ matrix.artifact }}
+          files: ${{ env.ARTIFACT }}
+
+      - name: Upload release asset (GITHUB_TOKEN)
+        if: ${{ secrets.RELEASE_PAT == '' }}
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          files: ${{ env.ARTIFACT }}
