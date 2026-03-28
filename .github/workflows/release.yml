@@ -34,16 +34,7 @@ jobs:
           cp "target/release/${BIN}" dist/
           tar -czf "${ARTIFACT}" -C dist "${BIN}"
 
-      - name: Upload release asset (PAT)
-        if: ${{ secrets.RELEASE_PAT != '' }}
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
-        with:
-          files: ${{ env.ARTIFACT }}
-
-      - name: Upload release asset (GITHUB_TOKEN)
-        if: ${{ secrets.RELEASE_PAT == '' }}
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
