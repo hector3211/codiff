@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>codiff</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --panel-muted: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #0ea5e9;
+        --added: #22c55e;
+        --modified: #f59e0b;
+        --deleted: #ef4444;
+        --border: #334155;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 0%, #1e293b 0%, var(--bg) 45%);
+        min-height: 100vh;
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(6px);
+        position: sticky;
+        top: 0;
+      }
+
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 18px;
+        color: var(--accent);
+      }
+
+      .brand span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        min-height: calc(100vh - 58px);
+      }
+
+      .files {
+        border-right: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.95));
+        overflow: auto;
+      }
+
+      .files h2 {
+        margin: 0;
+        padding: 12px 14px;
+        font-size: 13px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .file-item {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        padding: 10px 14px;
+        border-bottom: 1px solid #1f2937;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .file-item:hover,
+      .file-item.active {
+        background: rgba(14, 165, 233, 0.12);
+      }
+
+      .file-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .file-path {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border: 1px solid transparent;
+      }
+
+      .badge.added {
+        color: var(--added);
+        border-color: rgba(34, 197, 94, 0.45);
+      }
+
+      .badge.modified {
+        color: var(--modified);
+        border-color: rgba(245, 158, 11, 0.45);
+      }
+
+      .badge.deleted {
+        color: var(--deleted);
+        border-color: rgba(239, 68, 68, 0.45);
+      }
+
+      .diff {
+        overflow: auto;
+        background: rgba(15, 23, 42, 0.4);
+      }
+
+      .diff pre {
+        margin: 0;
+        padding: 16px;
+        line-height: 1.45;
+        font-size: 13px;
+        white-space: pre;
+      }
+
+      .placeholder {
+        color: var(--muted);
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .files {
+          max-height: 38vh;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <h1>codiff</h1>
+        <span>realtime local code review</span>
+      </div>
+      <div class="status" id="status">connecting...</div>
+    </header>
+
+    <main class="layout">
+      <section class="files">
+        <h2>Changed Files</h2>
+        <div id="files"></div>
+      </section>
+      <section class="diff">
+        <pre id="diff" class="placeholder">No changed files yet. Start editing to see live diffs.</pre>
+      </section>
+    </main>
+
+    <script>
+      const filesEl = document.getElementById("files");
+      const diffEl = document.getElementById("diff");
+      const statusEl = document.getElementById("status");
+
+      const changes = new Map();
+      let selected = null;
+
+      function formatStatus(status) {
+        if (!status) return "";
+        return status;
+      }
+
+      function sortedChanges() {
+        return Array.from(changes.values()).sort((a, b) =>
+          a.path.localeCompare(b.path)
+        );
+      }
+
+      function renderFiles() {
+        const items = sortedChanges();
+        filesEl.innerHTML = "";
+
+        if (items.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "placeholder";
+          empty.style.padding = "14px";
+          empty.textContent = "No files changed.";
+          filesEl.appendChild(empty);
+          return;
+        }
+
+        if (!selected || !changes.has(selected)) {
+          selected = items[0].path;
+        }
+
+        for (const item of items) {
+          const button = document.createElement("button");
+          button.className = "file-item" + (item.path === selected ? " active" : "");
+          button.onclick = () => {
+            selected = item.path;
+            renderFiles();
+            renderDiff();
+          };
+
+          const row = document.createElement("div");
+          row.className = "file-row";
+
+          const path = document.createElement("span");
+          path.className = "file-path";
+          path.textContent = item.path;
+
+          const badge = document.createElement("span");
+          badge.className = "badge " + item.status;
+          badge.textContent = formatStatus(item.status);
+
+          row.appendChild(path);
+          row.appendChild(badge);
+          button.appendChild(row);
+          filesEl.appendChild(button);
+        }
+      }
+
+      function renderDiff() {
+        if (!selected || !changes.has(selected)) {
+          diffEl.className = "placeholder";
+          diffEl.textContent = "No changed files yet. Start editing to see live diffs.";
+          return;
+        }
+
+        const item = changes.get(selected);
+        diffEl.className = "";
+        diffEl.textContent = item.diff || "(no diff available)";
+      }
+
+      function consumeChange(change) {
+        if (change.status === "unchanged") {
+          changes.delete(change.path);
+        } else {
+          changes.set(change.path, change);
+        }
+        renderFiles();
+        renderDiff();
+      }
+
+      async function bootstrap() {
+        const response = await fetch("/api/state");
+        const initial = await response.json();
+        for (const item of initial) {
+          changes.set(item.path, item);
+        }
+        renderFiles();
+        renderDiff();
+      }
+
+      function connect() {
+        const es = new EventSource("/events");
+
+        es.onopen = () => {
+          statusEl.textContent = "connected";
+        };
+
+        es.onerror = () => {
+          statusEl.textContent = "disconnected - retrying";
+        };
+
+        es.addEventListener("change", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            consumeChange(payload);
+          } catch {
+            statusEl.textContent = "event parse error";
+          }
+        });
+      }
+
+      bootstrap().then(connect).catch(() => {
+        statusEl.textContent = "failed to initialize";
+      });
+    </script>
+  </body>
+</html>
