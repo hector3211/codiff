@@ -272,8 +272,12 @@ async fn main() -> Result<()> {
 
 async fn start_watcher(state: AppState, debounce_ms: u64) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<notify::Result<notify::Event>>(1024);
+    let root = state.root.clone();
     let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
         move |event| {
+            if !should_enqueue_event(&root, &event) {
+                return;
+            }
             if tx.try_send(event).is_err() {
                 eprintln!("watch queue is full; dropping filesystem event");
             }
@@ -478,7 +482,42 @@ fn to_relative(root: &Path, path: &Path) -> Option<String> {
 }
 
 fn should_ignore_rel(rel: &str) -> bool {
-    rel.starts_with(".git/") || rel.starts_with("target/")
+    const IGNORED_PATH_PREFIXES: &[&str] = &[
+        ".git/",
+        "target/",
+        "node_modules/",
+        "dist/",
+        "build/",
+        ".next/",
+        ".nuxt/",
+        ".svelte-kit/",
+        "coverage/",
+        ".turbo/",
+        ".cache/",
+        "tmp/",
+        "temp/",
+    ];
+
+    IGNORED_PATH_PREFIXES
+        .iter()
+        .any(|prefix| rel.starts_with(prefix))
+}
+
+fn should_enqueue_event(root: &Path, event_result: &notify::Result<notify::Event>) -> bool {
+    let event = match event_result {
+        Ok(event) => event,
+        Err(_) => return true,
+    };
+
+    if should_skip_kind(&event.kind) {
+        return false;
+    }
+
+    event.paths.iter().any(|path| {
+        to_relative(root, path)
+            .map(|rel| !should_ignore_rel(&rel))
+            .unwrap_or(false)
+    })
 }
 
 fn enforce_bind_policy(host: &str, allow_remote: bool) -> Result<()> {
@@ -769,6 +808,10 @@ mod tests {
     fn ignore_rules_skip_git_and_target() {
         assert!(should_ignore_rel(".git/HEAD"));
         assert!(should_ignore_rel("target/debug/app"));
+        assert!(should_ignore_rel("node_modules/pkg/index.js"));
+        assert!(should_ignore_rel("dist/assets/app.js"));
+        assert!(should_ignore_rel("build/output.txt"));
+        assert!(should_ignore_rel(".next/static/chunk.js"));
         assert!(!should_ignore_rel("src/main.rs"));
     }
 

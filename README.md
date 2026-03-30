@@ -122,7 +122,7 @@ codiff . --allow-remote -H 0.0.0.0 -p 8787
 ## Current limitations
 
 - Baseline is session-start snapshot (not yet git-HEAD mode)
-- Ignore configuration is currently basic (`.git/`, `target/`)
+- Ignore configuration currently uses built-in defaults (for example `.git/`, `target/`, `node_modules/`, `dist/`, `build/`) and does not yet support custom patterns
 - Single-process local runtime (no multi-session project registry yet)
 
 ## Development
